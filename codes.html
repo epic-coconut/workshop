@@ -1,45 +1,179 @@
+<!DOCTYPE html>
 <html>
-  <head>
-    <title>My Game</title>
-  </head>
-  <body>
-    <!-- Import Wizard Orpheus -->
-    <script src="https://cdn.jsdelivr.net/gh/hackclub/wizard-orpheus@ff51edc57157adda99abff5cc4ac71a20285712c/wizard_orpheus.js"></script>
+<head>
+    <title>The Rug Merchant Game</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f0e6;
+        }
+        h1 { color: #5c3d2e; text-align: center; }
+        .price-box {
+            background: #2c5530;
+            color: gold;
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .chat-box {
+            background: white;
+            height: 400px;
+            overflow-y: auto;
+            padding: 15px;
+            border-radius: 10px;
+            border: 2px solid #d4a373;
+            margin-bottom: 15px;
+        }
+        .user-message { color: #1a5f7a; margin: 10px 0; text-align: right; }
+        .bot-message { color: #5c3d2e; margin: 10px 0; text-align: left; }
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #d4a373;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .status { text-align: center; font-size: 12px; margin-top: 10px; }
+        .connected { color: green; }
+        .disconnected { color: red; }
+        button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #5c3d2e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
 
-    <!-- Your JavaScript goes here -->
-    <script>
-      const openAIKey = "PUT_YOUR_OPENAI_KEY_HERE"
+<h1>🪑 The Rug Merchant 🪑</h1>
 
-      const gamePrompt = `You are a rug merchant. You are selling a rug for
-      $200. Your job is to negotiate with the customer to sell the rug for the
-      highest possible value, settling at last resort at $100. It should take
-      at least 5 messages.`
+<div class="price-box">💰 Current Price: $<span id="price">200</span></div>
+<div class="chat-box" id="chat"></div>
+<input type="text" id="userInput" placeholder="Type your offer... (Press Enter)">
+<button onclick="sendMessage()">Send</button>
+<div class="status" id="status">🔍 Checking Ollama...</div>
 
-      // Initiate the Wizard Orpheus game engine. gamePrompt has all of the
-      // "rules" of your game in it. You can add more rules by adding more
-      // sentences to the prompt.
-      let myGame = new WizardOrpheus(openAIKey, gamePrompt)
-
-      // You can define variables that the game engine keeps track of like this.
-      // Every time an action in the game happens, Wizard Orpheus will
-      // automaticlaly update these variables and send the current values to
-      // your callback.
-      myGame.variable('currentPrice', 'The current negotiated price for the rug', 200)
-
-      // This defines a function in myGame that you can later call to trigger an
-      // action in the game. In this example, this creates the function
-      // myGame.sendMessage, which you can call in your code like this:
-      //
-      // myGame.sendMessage('I will offer $150 for this rug.')
-      myGame.createUserAction({
-        name: 'sendMessage',
-        parameters: ['A message from the user to the merchant'],
-        howBotShouldHandle: "Respond to the user's message."
-      })
-
-      myGame.botAction('respond', 'Respond to the user', { response: 'sample response' }, data => {
-
-      })
-    </script>
-  </body>
+<script>
+    let currentPrice = 200;
+    let waitingForResponse = false;
+    
+    const chatDiv = document.getElementById('chat');
+    const userInput = document.getElementById('userInput');
+    const priceSpan = document.getElementById('price');
+    const statusDiv = document.getElementById('status');
+    
+    chatDiv.innerHTML = '<div class="bot-message">🧙 <strong>Merchant:</strong> Welcome, traveler! This magnificent Persian rug - only $200! What do you say?</div>';
+    
+    function addMessage(text, isUser) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = isUser ? 'user-message' : 'bot-message';
+        const speaker = isUser ? '🧙 You' : '🧙 Merchant';
+        messageDiv.innerHTML = `<strong>${speaker}:</strong> ${escapeHtml(text)}`;
+        chatDiv.appendChild(messageDiv);
+        chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
+    
+    function escapeHtml(text) {
+        return text.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+    
+    function updatePrice(newPrice) {
+        currentPrice = newPrice;
+        priceSpan.textContent = currentPrice;
+    }
+    
+    async function checkOllama() {
+        try {
+            const response = await fetch('http://localhost:11434/api/tags');
+            if (response.ok) {
+                statusDiv.innerHTML = '✅ Ollama ready! Start haggling!';
+                statusDiv.className = 'status connected';
+                return true;
+            }
+        } catch (error) {
+            statusDiv.innerHTML = '❌ Ollama not running! Open PowerShell and run: ollama serve';
+            statusDiv.className = 'status disconnected';
+            return false;
+        }
+    }
+    
+    async function sendMessage() {
+        if (waitingForResponse) return;
+        
+        const message = userInput.value.trim();
+        if (!message) return;
+        
+        addMessage(message, true);
+        userInput.value = '';
+        waitingForResponse = true;
+        userInput.disabled = true;
+        
+        const prompt = `You are a stubborn rug merchant. Current price is $${currentPrice}.
+        you want to sell it at $200 and there will be people that negotiate with you. Lower it by $5 each time
+        
+        
+        At the END, write EXACTLY [PRICE:X] with the new price.
+        
+        Customer says: "${message}"
+        
+        Merchant response (with [PRICE:X] at end):`;
+        
+        try {
+            const response = await fetch('http://localhost:11434/api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'gemma2:2b',
+                    prompt: prompt,
+                    stream: false,
+                    options: { temperature: 0.8, num_predict: 100 }
+                })
+            });
+            
+            const data = await response.json();
+            let reply = data.response || "Hmm, let me consider that...";
+            
+            const priceMatch = reply.match(/\[PRICE:\s*(\d+)\]/i);
+            if (priceMatch) {
+                let newPrice = parseInt(priceMatch[1]);
+                if (newPrice >= 50 && newPrice <= 400) {
+                    updatePrice(newPrice);
+                }
+                reply = reply.replace(/\[PRICE:\s*\d+\]/i, '').trim();
+            }
+            
+            addMessage(reply, false);
+        } catch (error) {
+            addMessage("Connection error! Make sure Ollama is running in PowerShell.", false);
+        }
+        
+        waitingForResponse = false;
+        userInput.disabled = false;
+        userInput.focus();
+    }
+    
+    userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+    
+    checkOllama();
+    setInterval(checkOllama, 5000);
+</script>
+</body>
 </html>
